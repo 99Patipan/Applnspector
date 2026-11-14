@@ -1,6 +1,6 @@
 # App Inspector (ใช้ส่วนตัว)
 
-แอป Android (Kotlin + Jetpack Compose, Dark theme, เก็บข้อมูลในเครื่องเท่านั้น ไม่มี INTERNET permission)
+แอป Android (Kotlin + Jetpack Compose, Light theme, เก็บข้อมูลในเครื่องเท่านั้น ไม่มี INTERNET permission)
 
 ## วิธีสร้าง APK
 1. เปิดโฟลเดอร์นี้ด้วย Android Studio (Ladybug ขึ้นไป) → รอ Gradle Sync
