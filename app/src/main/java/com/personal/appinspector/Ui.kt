@@ -11,6 +11,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -95,7 +97,7 @@ fun AppRow(a: AppItem, trailing: String? = null, sub: String? = null, onClick: (
         AppIcon(a.pkg)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(a.label, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+            Text((if (!a.isSystem && !a.hasLauncher) "👻 " else "") + a.label, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
             Text(
                 sub ?: a.pkg, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -113,7 +115,8 @@ fun AppsTab(vm: MainVM, onOpen: (AppItem) -> Unit) {
     var byUpdate by remember { mutableStateOf(false) }
     val list = remember(vm.apps, q, filter, byUpdate) {
         vm.apps.filter {
-            (filter == 2 || (filter == 0 && !it.isSystem) || (filter == 1 && it.isSystem)) &&
+            (filter == 2 || (filter == 0 && !it.isSystem) || (filter == 1 && it.isSystem) ||
+                (filter == 3 && !it.isSystem && !it.hasLauncher)) &&
                 (q.isBlank() || it.label.contains(q, true) || it.pkg.contains(q, true))
         }.let { l -> if (byUpdate) l.sortedByDescending { it.lastUpdate } else l }
     }
@@ -123,8 +126,8 @@ fun AppsTab(vm: MainVM, onOpen: (AppItem) -> Unit) {
             label = { Text("ค้นหาชื่อแอป / package") },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
         )
-        Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("ผู้ใช้", "ระบบ", "ทั้งหมด").forEachIndexed { i, t ->
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("ผู้ใช้", "ระบบ", "ทั้งหมด", "👻 ไม่มีไอคอน").forEachIndexed { i, t ->
                 FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(t) })
             }
             FilterChip(selected = byUpdate, onClick = { byUpdate = !byUpdate }, label = { Text("อัปเดตล่าสุด") })
@@ -278,6 +281,7 @@ fun DetailScreen(vm: MainVM, a: AppItem, onBack: () -> Unit) {
                     InfoRow("ติดตั้งครั้งแรก", fmt(a.firstInstall))
                     InfoRow("อัปเดตล่าสุด", fmt(a.lastUpdate))
                     InfoRow("ประเภท", if (a.isSystem) "แอประบบ" else "แอปผู้ใช้")
+                    InfoRow("ไอคอนบนหน้าจอ", if (a.hasLauncher) "มี" else "ไม่มี (ซ่อน/เบื้องหลัง)")
                     InfoRow("ขนาด APK", "%.1f MB (%d ไฟล์)".format(size / 1048576.0, 1 + a.splits.size))
                     InfoRow("ตำแหน่ง", a.sourceDir)
                 }

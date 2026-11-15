@@ -2,6 +2,7 @@ package com.personal.appinspector
 
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -22,7 +23,8 @@ import java.util.zip.ZipFile
 data class AppItem(
     val pkg: String, val label: String, val versionName: String?, val versionCode: Long,
     val targetSdk: Int, val minSdk: Int, val isSystem: Boolean, val installer: String?,
-    val firstInstall: Long, val lastUpdate: Long, val sourceDir: String, val splits: List<String>
+    val firstInstall: Long, val lastUpdate: Long, val sourceDir: String, val splits: List<String>,
+    val hasLauncher: Boolean
 )
 
 data class PermEntry(val name: String, val granted: Boolean, val risk: String?)
@@ -104,6 +106,7 @@ class Repo(private val ctx: Context) {
         val list = if (Build.VERSION.SDK_INT >= 33)
             pm.getInstalledPackages(PackageManager.PackageInfoFlags.of(0))
         else pm.getInstalledPackages(0)
+        val launcherPkgs = launcherPackages()
         return list.mapNotNull { p ->
             val ai = p.applicationInfo ?: return@mapNotNull null
             AppItem(
@@ -113,9 +116,20 @@ class Repo(private val ctx: Context) {
                 isSystem = (ai.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
                 installer = installerOf(p.packageName),
                 firstInstall = p.firstInstallTime, lastUpdate = p.lastUpdateTime,
-                sourceDir = ai.sourceDir, splits = ai.splitSourceDirs?.toList() ?: emptyList()
+                sourceDir = ai.sourceDir, splits = ai.splitSourceDirs?.toList() ?: emptyList(),
+                hasLauncher = p.packageName in launcherPkgs
             )
         }.sortedBy { it.label.lowercase() }
+    }
+
+    // แอปที่มี launcher activity (ไอคอนบนหน้าจอ) ที่เปิดใช้งานอยู่
+    @Suppress("DEPRECATION")
+    private fun launcherPackages(): Set<String> {
+        val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val l = if (Build.VERSION.SDK_INT >= 33)
+            pm.queryIntentActivities(i, PackageManager.ResolveInfoFlags.of(0))
+        else pm.queryIntentActivities(i, 0)
+        return l.map { it.activityInfo.packageName }.toSet()
     }
 
     private fun hash(alg: String, b: ByteArray) =
@@ -205,6 +219,14 @@ class Repo(private val ctx: Context) {
         if (!a.isSystem && (a.installer == null || installerName(a.installer).startsWith("ติดตั้งจากไฟล์"))) {
             score += 10; risks += Risk(2, "ติดตั้งจากแหล่งที่ไม่ใช่สโตร์")
         }
+        if (!a.isSystem && !a.hasLauncher) {
+            score += 10
+            risks += Risk(2, "ไม่มีไอคอนบนหน้าจอ (แอปซ่อนตัว หรือเป็นแอปทำงานเบื้องหลัง)")
+            if (a.pkg in accessibilityPkgs || score >= 30) {
+                score += 15
+                risks += Risk(3, "ไม่มีไอคอน + สิทธิ์อ่อนไหว/Accessibility: ลักษณะเข้าข่ายแอปซ่อนตัว ควรตรวจสอบ")
+            }
+        }
         val privacy = (100 - found.sumOf { it.severity * 7 }).coerceIn(0, 100)
 
         return Analysis(
@@ -257,7 +279,7 @@ class Repo(private val ctx: Context) {
             val cur = apps.associateBy { it.pkg }
             for (a in apps) {
                 val o = old[a.pkg]
-                if (o == null) events += HistEvent(now, "install", a.pkg, a.label, "v${a.versionName}")
+                if (o == null) events += HistEvent(now, "install", a.pkg, a.label, "v${a.versionName}" + if (!a.isSystem && !a.hasLauncher) " · ไม่มีไอคอน 👻" else "")
                 else if (o.first != a.versionCode) events += HistEvent(now, "update", a.pkg, a.label, "${o.first} → ${a.versionCode}")
             }
             for ((pkg, o) in old) if (pkg !in cur) events += HistEvent(now, "remove", pkg, o.second, "")
